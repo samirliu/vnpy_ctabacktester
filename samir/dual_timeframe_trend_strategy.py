@@ -166,7 +166,7 @@ class Shenlong(SignalStrategy):
     # ============================================================
 
     def generate_entry_signal(
-        self, am: ArrayManager, bar: BarData, window_direction: str
+        self, am: ArrayManager, bar: BarData, dir: str
     ):
         """
         返回：
@@ -174,15 +174,18 @@ class Shenlong(SignalStrategy):
         - 'close_long' / 'close_short' → 立即平仓
         - None → 无信号
         """
-
+        if str is None:
+            return None
+        self.owner.output_msg(f"receive signal: {dir}")
         highs = am.high_array[::-1]  # 0 最新
         lows = am.low_array[::-1]
+        closes = am.close_array[::-1]
         length = len(highs) - self.sh
 
         # Belt/XMA 计算
-        belt2, belt3, belt4, slld_0, slld_8 = self._compute_belt_exact(
-            length, highs, lows
-        )
+        # belt2, belt3, belt4, slld_0, slld_8 = self._compute_belt_exact(
+        #     length, highs, lows
+        # )
         xma3_1, xma2_1 = self._compute_xma_exact(length, highs, lows)
 
         # g_ibuf buffers
@@ -201,44 +204,30 @@ class Shenlong(SignalStrategy):
         # 上通道线
         g120_0 = safe(g_ibuf_120, 0)
         g120_1 = safe(g_ibuf_120, 1)
-        # 腰带线上沿
-        slld0_0 = safe(slld_0, 0)
-        # 腰带线下沿
-        slld8_0 = safe(slld_8, 0)
+
         low_0, low_1 = lows[0], lows[1]
         high_0, high_1 = highs[0], highs[1]
+        close_0, close_1 = closes[0], closes[1]
 
         # 开仓条件
-        condition_buy = g116_1 < low_1 and g116_0 > low_0 and (g116_0 > slld8_0)
-        condition_sell = high_1 < g120_1 and high_0 > g120_0 and (g120_0 < slld0_0)
+        condition_buy = g116_1 < close_1 and g116_0 > close_0 and (dir == "long")
+        condition_close_buy = close_1 < g120_1 and close_0 > g120_0 and (dir == "long")
+        condition_sell = close_1 < g120_1 and close_0 > g120_0 and (dir == "short")
+        condition_close_sell = g116_1 < close_1 and g116_0 > close_0 and (dir == "short")
+        # condition_buy = g116_1 < low_1 and g116_0 > low_0 and (g116_0 > slld8_0)
+        # condition_sell = high_1 < g120_1 and high_0 > g120_0 and (g120_0 < slld0_0)
 
         # 平仓条件
-        condition_close_buy = (
-            high_1 < g120_1
-            and high_0 > g120_0
-            and (
-                (g120_0 > slld0_0 and g116_0 > slld8_0)
-                # or not (g120_0 < slld0_0 and g116_0 > slld8_0)
-            )
-        )
-        condition_close_sell = (
-            g116_1 < low_1
-            and g116_0 > low_0
-            and (
-                (g120_0 < slld0_0 and g116_0 < slld8_0)
-                # or not (g120_0 < slld0_0 and g116_0 > slld8_0)
-            )
-        )
         split = "[shenlong_signal]  "
         if condition_buy:
             self.owner.output_msg(
                 f"{split}long trigger Bar信息 - 时间: {bar.datetime}, O: {bar.open_price}, H: {bar.high_price}, L: {bar.low_price}, C: {bar.close_price}, V: {bar.volume}"
             )
             self.owner.output_msg(
-                f"{split}指标值: g116_0={g116_0:.6f}, g116_1={g116_1:.6f}, g120_0={g120_0:.6f}, g120_1={g120_1:.6f}, slld0_0={slld0_0:.6f}, slld8_0={slld8_0:.6f}"
+                f"{split}指标值: g116_0={g116_0:.6f}, g116_1={g116_1:.6f}, g120_0={g120_0:.6f}, g120_1={g120_1:.6f}"
             )
             self.owner.output_msg(
-                f"{split}价格: low_0={low_0:.4f}, low_1={low_1:.4f}, high_0={high_0:.4f}, high_1={high_1:.4f}"
+                f"{split}价格: low_0={low_0:.4f}, low_1={low_1:.4f}, high_0={high_0:.4f}, high_1={high_1:.4f}, close_0={close_0:.4f}, close_1={close_1:.4f}"
             )
             return "long"
         elif condition_sell:
@@ -246,10 +235,10 @@ class Shenlong(SignalStrategy):
                 f"{split}short trigger Bar信息 - 时间: {bar.datetime}, O: {bar.open_price}, H: {bar.high_price}, L: {bar.low_price}, C: {bar.close_price}, V: {bar.volume}"
             )
             self.owner.output_msg(
-                f"{split}指标值: g116_0={g116_0:.6f}, g116_1={g116_1:.6f}, g120_0={g120_0:.6f}, g120_1={g120_1:.6f}, slld0_0={slld0_0:.6f}, slld8_0={slld8_0:.6f}"
+                f"{split}指标值: g116_0={g116_0:.6f}, g116_1={g116_1:.6f}, g120_0={g120_0:.6f}, g120_1={g120_1:.6f}"
             )
             self.owner.output_msg(
-                f"{split}价格: low_0={low_0:.4f}, low_1={low_1:.4f}, high_0={high_0:.4f}, high_1={high_1:.4f}"
+                f"{split}价格: low_0={low_0:.4f}, low_1={low_1:.4f}, high_0={high_0:.4f}, high_1={high_1:.4f}, close_0={close_0:.4f}, close_1={close_1:.4f}"
             )
             return "short"
         elif condition_close_buy:
@@ -257,10 +246,10 @@ class Shenlong(SignalStrategy):
                 f"{split}close_long Bar信息 - 时间: {bar.datetime}, O: {bar.open_price}, H: {bar.high_price}, L: {bar.low_price}, C: {bar.close_price}, V: {bar.volume}"
             )
             self.owner.output_msg(
-                f"{split}指标值: g116_0={g116_0:.6f}, g116_1={g116_1:.6f}, g120_0={g120_0:.6f}, g120_1={g120_1:.6f}, slld0_0={slld0_0:.6f}, slld8_0={slld8_0:.6f}"
+                f"{split}指标值: g116_0={g116_0:.6f}, g116_1={g116_1:.6f}, g120_0={g120_0:.6f}, g120_1={g120_1:.6f}"
             )
             self.owner.output_msg(
-                f"{split}价格: low_0={low_0:.4f}, low_1={low_1:.4f}, high_0={high_0:.4f}, high_1={high_1:.4f}"
+                f"{split}价格: low_0={low_0:.4f}, low_1={low_1:.4f}, high_0={high_0:.4f}, high_1={high_1:.4f}, close_0={close_0:.4f}, close_1={close_1:.4f}"
             )
             return "close_long"
         elif condition_close_sell:
@@ -268,10 +257,10 @@ class Shenlong(SignalStrategy):
                 f"{split}close_short Bar信息 - 时间: {bar.datetime}, O: {bar.open_price}, H: {bar.high_price}, L: {bar.low_price}, C: {bar.close_price}, V: {bar.volume}"
             )
             self.owner.output_msg(
-                f"{split}指标值: g116_0={g116_0:.6f}, g116_1={g116_1:.6f}, g120_0={g120_0:.6f}, g120_1={g120_1:.6f}, slld0_0={slld0_0:.6f}, slld8_0={slld8_0:.6f}"
+                f"{split}指标值: g116_0={g116_0:.6f}, g116_1={g116_1:.6f}, g120_0={g120_0:.6f}, g120_1={g120_1:.6f}"
             )
             self.owner.output_msg(
-                f"{split}价格: low_0={low_0:.4f}, low_1={low_1:.4f}, high_0={high_0:.4f}, high_1={high_1:.4f}"
+                f"{split}价格: low_0={low_0:.4f}, low_1={low_1:.4f}, high_0={high_0:.4f}, high_1={high_1:.4f}, close_0={close_0:.4f}, close_1={close_1:.4f}"
             )
             return "close_short"
         return None
@@ -505,7 +494,6 @@ class DualStrategy(CtaTemplate):
         self.pos_state = PositionState()
         self._pending_entry: Optional[dict] = None
         self._pending_close: Optional[dict] = None
-        self.trades_taken_in_window: Dict[str, int] = {"long": 0, "short": 0}
         self.long_bar_count: int = 0
 
         # 周期映射
@@ -513,6 +501,7 @@ class DualStrategy(CtaTemplate):
         self._short_map = {4: 60, 3: 30, 2: 15, 1: 5}
         self.long_minutes = self._long_map.get(self.long_kline, 60 * 24)
         self.short_minutes = self._short_map.get(self.short_kline, 30)
+        self.close_position_flag = False
 
         # BarGenerator 初始化
         if self.long_kline == 3:
@@ -584,37 +573,26 @@ class DualStrategy(CtaTemplate):
             self.bg_long_bars.pop(0)
         if not self.am_long.inited:
             return
-        print(
-            f"[{self.long_bar_count}] 计数器 Bar: {bar.datetime} O:{bar.open_price} H:{bar.high_price} L:{bar.low_price} C:{bar.close_price}"
-            f" pos_state info: {self.pos_state.direction}, {self.pos_state.entry_price},{self.pos_state.volume}, {self.pos_state.tp}, {self.pos_state.sl}"
-        )
+        # print(
+        #     f"[{self.long_bar_count}] 计数器 Bar: {bar.datetime} O:{bar.open_price} H:{bar.high_price} L:{bar.low_price} C:{bar.close_price}"
+        #     f" pos_state info: {self.pos_state.direction}, {self.pos_state.entry_price},{self.pos_state.volume}, {self.pos_state.tp}, {self.pos_state.sl}"
+        # )
         signal = self.long_signal_strategy.generate_entry_signal(self.am_long, bar, None)
-        # 新窗口开仓
-        net_pos = abs(getattr(self, "pos", 0))
+        self.long_signal = signal
         # 平仓信号优先
-        if signal == "close_long" and self.pos_state.direction == "long":
-            self.close_position(bar.close_price, "LongWindow Close triggered")
-            self.long_signal = None
-        elif signal == "close_short" and self.pos_state.direction == "short":
-            self.close_position(bar.close_price, "ShortWindow Close triggered")
-            self.long_signal = None
-        elif signal in ["long", "short"]:
-            if signal == self.pos_state.direction and self.max_pos <= net_pos:
-                return
-            self.long_signal = signal
+        if signal in ["long", "short"]:
             self.output_msg(
                 f"[on_long_bar] generate signal: direction={signal} start_bar={self.long_bar_count}"
             )
-            self.trades_taken_in_window[signal] = 0
             # 立即反转平仓
             if signal == "long" and (
                 self.pos_state.direction == "short" or getattr(self, "pos", 0) < 0
             ):
-                self.close_position(bar.close_price, "Reversed by long-window")
+                self.close_position(bar.close_price, "Reversed long by long-window")
             elif signal == "short" and (
                 self.pos_state.direction == "long" or getattr(self, "pos", 0) > 0
             ):
-                self.close_position(bar.close_price, "Reversed by short-window")
+                self.close_position(bar.close_price, "Reversed short by long-window")
 
     # -------------------------
     # 短周期开仓
@@ -626,11 +604,11 @@ class DualStrategy(CtaTemplate):
         atr = self.am_long.atr(self.atr_window)
         side = self.long_signal
         if (side is not None):
-            if self.trades_taken_in_window[side] >= self.max_trades_per_window:
-                return
             entry_signal = self.short_signal_strategy.generate_entry_signal(
                 self.am_short, bar, side
             )
+            if entry_signal == self.pos_state.direction and self.max_pos <= abs(self.pos):
+                return
             if entry_signal == "long":
                 self.open_long(
                     bar.close_price,
@@ -638,7 +616,6 @@ class DualStrategy(CtaTemplate):
                     bar.close_price - atr * self.sl_multiplier,
                     bar.close_price + atr * self.tp_multiplier,
                 )
-                self.trades_taken_in_window[side] += 1
             elif entry_signal == "short":
                 self.open_short(
                     bar.close_price,
@@ -646,7 +623,10 @@ class DualStrategy(CtaTemplate):
                     bar.close_price + atr * self.sl_multiplier,
                     bar.close_price - atr * self.tp_multiplier,
                 )
-                self.trades_taken_in_window[side] += 1
+            elif entry_signal == "close_long" and self.pos > 0:
+                self.close_position(bar.close_price, "Reversed close_long by short-window")
+            elif entry_signal == "close_short" and self.pos < 0:
+                self.close_position(bar.close_price, "Reversed close_short by short-window")
         self.check_signal_exit(bar)
 
     # -------------------------
@@ -687,18 +667,13 @@ class DualStrategy(CtaTemplate):
         )
 
     def close_position(self, price, reason):
-        if self._pending_close is not None:
+        if self.pos == 0 or self.close_position_flag:
             return
-        net_pos = getattr(self, "pos", None)
-        if net_pos is not None:
-            vol = abs(net_pos)
-            dirn = "long" if net_pos > 0 else ("short" if net_pos < 0 else None)
+        vol = abs(self.pos)
+        if self.pos < 0:
+            dirn = "short"
         else:
-            vol = int(self.pos_state.volume)
-            dirn = self.pos_state.direction
-        if vol <= 0 or dirn is None:
-            self.pos_state = PositionState()
-            return
+            dirn = "long"
         try:
             if dirn == "long":
                 orderid = self.sell(price, vol)
@@ -710,6 +685,7 @@ class DualStrategy(CtaTemplate):
                 self.output_msg(
                     f"[close_position： cover] side={dirn} price={price} vol={vol} orderid={orderid} reason={reason}"
                 )
+            self.close_position_flag = True
         except:
             orderid = None
         self._pending_close = {
@@ -830,12 +806,13 @@ class DualStrategy(CtaTemplate):
             self.write_log(traceback.format_exc())
 
     def update_capital(self, trade: TradeData):
+        
         # 计算成交金额
         trade_amount = trade.volume * trade.price * self.cta_engine.size
         # 计算手续费
         commission = trade_amount * self.cta_engine.rate
         # 计算滑点成本（简化处理）
-        slippage_cost = trade_amount * self.cta_engine.slippage * 0.01
+        slippage_cost = trade.price * self.cta_engine.size * self.cta_engine.slippage * 0.01
         # 根据交易方向更新资金
         if trade.direction == Direction.LONG:
             # 买入：资金减少
@@ -843,13 +820,20 @@ class DualStrategy(CtaTemplate):
         elif trade.direction == Direction.SHORT:
             # 卖出：资金增加（假设是平仓或做空）
             self.leverage_capital += trade_amount - commission - slippage_cost
+        self.output_msg(
+                f"leverage_capital: {self.leverage_capital}, trade_amount: {trade_amount},commission: {commission}, slippage_cost: {slippage_cost} "
+                )
         if self.pos == 0:
+            tmp_capital = self.current_capital
+            self.close_position_flag = False
             self.current_capital = (
                 self.cta_engine.capital
                 + self.leverage_capital
                 - self.cta_engine.capital * self.leverage_ratio
             )
-            self.output_msg(f"current_capital={self.current_capital}")
+            self.output_msg(
+                f"current_capital: {self.current_capital} value: {self.current_capital - tmp_capital}"
+                )
         self.output_msg(
             f"[on_trade] orderid={trade.orderid}, trade bar={trade.datetime}, "
             f"{trade.direction.name}-{trade.direction.value}-{trade.offset.name}, leverage_capital = {self.leverage_capital:.2f} "
