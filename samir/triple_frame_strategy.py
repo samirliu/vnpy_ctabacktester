@@ -98,7 +98,6 @@ class TripleTimeframeStrategy(CtaTemplate):
         # 趋势恢复（假破）
 
 
-
     def detect_long_trend(self, bar: BarData) -> Optional[str]:
         """
         你在这里放：
